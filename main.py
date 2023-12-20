@@ -1,7 +1,16 @@
 import bluetooth
 import cv2
-import numpy as np
+import imageProcessing
 
+img = cv2.imread("OPEN.png")
+cv2.imshow("org", img)
+byteArray = imageProcessing.imageToBMPArray(img)
+
+
+# with open("my_file.txt", "wb") as binary_file:
+#     # Write bytes to file
+#     binary_file.write(byteArray)
+cv2.waitKey(0)
 server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
 server_sock.bind(("", bluetooth.PORT_ANY))
 server_sock.listen(1)
@@ -24,7 +33,7 @@ print("Accepted connection from", client_info)
 try:
     while True:
         message = input("Enter message: ")
-        client_sock.send(message.encode("utf-8"))
+        client_sock.send(byteArray)
 except OSError:
     pass
 
@@ -33,8 +42,3 @@ print("Disconnected")
 client_sock.close()
 server_sock.close()
 print("All done.")
-
-
-
-
-
