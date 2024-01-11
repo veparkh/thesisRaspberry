@@ -1,6 +1,7 @@
 import bluetooth
 import cv2
 import bluetoothDataExchange
-from imageProcessing import image_handler
+from imageProcessing import findPathMatrix
 
-bluetoothDataExchange.exchange()
+findPathMatrix()
+

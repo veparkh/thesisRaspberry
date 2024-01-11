@@ -18,7 +18,7 @@ def highlight_color(img):
 def find_lines(img):
     img_lines = np.zeros((np.shape(img)[0], np.shape(img)[1], 3))
 
-    lines = cv2.HoughLinesP(img, 1, 3.14 / 180, 100, minLineLength=50,maxLineGap=10)
+    lines = cv2.HoughLinesP(img, 1, 3.14 / 180, 100, minLineLength=50, maxLineGap=10)
 
     if lines is not None:
         print(len(lines))
@@ -51,20 +51,7 @@ def find_contours(img):
     return imgContour, cnt
 
 
-def find_corners(img):
-    img_corners = np.zeros((np.shape(img)[0], np.shape(img)[1], 3))
-    dst = cv.cornerHarris(img, 5, 9, 0.14)
-    moments = cv2.moments(img, True)
-    # result is dilated for marking the corners, not important
-    dst = cv.dilate(dst, None)
-    # Threshold for an optimal value, it may vary depending on the image.
-    img_corners[dst > 0.1 * dst.max()] = [0, 0, 255]
-    x_coord = moments['m10'] / moments['m00']
-    y_coord = moments['m01'] / moments['m00']
-    img_corners[int(x_coord), int(y_coord)] = [0, 0, 255]
-    cv2.drawMarker(img_corners, (int(x_coord), int(y_coord)), thickness=2, markerSize=2, markerType=cv2.MARKER_DIAMOND,
-                   line_type=cv2.LINE_4, color=(0, 0, 255))
-    cv2.imshow("corners", img_corners)
+
 
 
 def image_handler():
@@ -80,3 +67,84 @@ def image_handler():
         # find_corners(img)
         if cv.waitKey(1) == 27:
             break
+
+
+def findBlockLines(img):
+    lines = cv2.HoughLines(img, 0.1, np.pi / 280, 100, 0, 0)
+    verticalLines = list(filter(lambda x: -1 < x[0][1] < 1, lines))
+    verLinesFiltered = list()
+    horLinesFiltered = list()
+
+    horizontalLines = list(filter(lambda x: 1 < x[0][1] < 2, lines))
+    verticalLines.sort(key=lambda x: x[0][0])
+    horizontalLines.sort(key=lambda x: x[0][0])
+    for i in range(0, len(verticalLines), 2):
+        if verticalLines[i][0][0] - 2 < abs(verticalLines[i][0][0]) < verticalLines[i + 1][0][0] + 2:
+            verLinesFiltered.append([(verticalLines[i][0][0] + verticalLines[i + 1][0][0]) / 2, 0])
+    for i in range(0, len(horizontalLines), 2):
+        if horizontalLines[i][0][0] - 2 < abs(horizontalLines[i][0][0]) < horizontalLines[i + 1][0][0] + 2:
+            horLinesFiltered.append([(horizontalLines[i][0][0] + horizontalLines[i + 1][0][0]) / 2, np.pi/2])
+    print(verLinesFiltered)
+    print(len(verLinesFiltered))
+    print(horLinesFiltered)
+    print(len(horLinesFiltered))
+    alLines = horLinesFiltered+verLinesFiltered
+    linesImg = np.zeros_like(img)
+    if alLines is not None:
+        for i in range(0, len(alLines)):
+            rho = alLines[i][0]
+            theta = alLines[i][1]
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * a))
+            pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * a))
+            cv.line(linesImg, pt1, pt2, (255), 1, cv.LINE_4)
+    cv2.imshow("lines", linesImg)
+    return horLinesFiltered, verLinesFiltered
+def findPathMatrix():
+    labyrImg = cv2.imread("labyrinth.png", cv2.IMREAD_GRAYSCALE)
+    labyrImg = 255 - labyrImg
+    cv2.imshow("orig", labyrImg)
+    _, labyrImg = cv2.threshold(labyrImg, 150, 255, cv2.THRESH_BINARY)
+    cv2.imshow("thresh", labyrImg)
+
+    horLines,verLines = findBlockLines(labyrImg)
+
+
+    #paths = np.zeros(shape=(len(horizontalLines), len(verticalLines)))
+    findInputs(horLines,verLines,labyrImg)
+    cv2.waitKey(0)
+
+
+def findInputs(horLines, verLines, img):
+    # верх`
+    point1= (0,0)
+    point2 = (0, 0)
+    for i in range(0, len(verLines)-1):
+        block = img[int(horLines[0][0]):int(horLines[1][0]+2), int(verLines[i][0]):int(verLines[i + 1][0]+2)] # Для матрицы
+        topBlock = img[int(horLines[0][0]):int(horLines[1][0]/2), int(verLines[i][0]):int(verLines[i + 1][0]+2)]
+        line = cv2.HoughLines(topBlock,0.2,np.pi/180,15)
+        if(line is None):
+            point1 = (0,i)
+        print(line)
+        cv2.imshow("block", block)
+        cv2.imshow("topBlock", topBlock)
+    # лево # право
+    # низ
+    for i in range(0, len(verLines) - 1):
+        block = img[int(horLines[-2][0]):int(horLines[-1][0]+1),int(verLines[i][0]):int(verLines[i + 1][0] + 2)]
+        bottomBlock = img[
+                int((horLines[-2][0]+horLines[-1][0])/2):int(horLines[-1][0]+2),
+                int(verLines[i][0]):int(verLines[i + 1][0] + 2)
+                ]
+        line = cv2.HoughLines(bottomBlock, 0.2, np.pi / 180, 15)
+        if (line is None):
+            point2 = (len(horLines)-1, i)
+
+
+        cv2.imshow("block", block)
+        cv2.imshow("topBlock", bottomBlock)
+    print(point1)
+    print(point2)
