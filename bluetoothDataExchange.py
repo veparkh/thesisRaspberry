@@ -4,8 +4,17 @@ import time
 
 import cv2
 import zlib
-
+import queue
 from bluetooth import BluetoothSocket
+from dataclasses import dataclass
+
+
+@dataclass
+class Angles:
+    roll: float
+    pitch: float
+
+queue_angles = queue.Queue()
 
 autoControlCommand = bytearray([255, 1])
 manualControlCommand = bytearray([255, 2])
@@ -16,15 +25,14 @@ coordCommand = bytearray([100, 2])
 
 mode = 0  # 0 - нет соединения/не выбран 1 - автоконтроль 2- ручное управление 3 - построение карты 4 - выбор режима
 # -1 - соединение разорвано
-angles = [0.0, 0.0]
 coord = [0.0, 0.0]
 image = False
 
 
 def byte_array_to_angles(arr: bytearray):
-    angle1 = struct.unpack('f', arr[0:4])
-    angle2 = struct.unpack('f', arr[4:8])
-    return [angle1, angle2]
+    angle1 = struct.unpack('>f', arr[0:4])
+    angle2 = struct.unpack('>f', arr[4:8])
+    return Angles(angle1, angle2)
 
 
 def coord_to_byte_arr_with_crc(x: float, y: float):
@@ -59,7 +67,7 @@ def image_to_byte_array(img):
         return None
 
 
-def handle_incoming_message(data,lock:threading.Lock):
+def handle_incoming_message(data, lock: threading.Lock):
     global mode
     global image
     if data[0] == 255 and data[1] in range(1, 5):
@@ -68,8 +76,8 @@ def handle_incoming_message(data,lock:threading.Lock):
 
     if data[0] == 100 and data[1] in range(1, 5):
         if data[1] == 1:
-            global angles
-            angles = byte_array_to_angles(data[4:])
+            angles = byte_array_to_angles(data[2:])
+            print("angles:",angles.roll,angles.pitch)
         elif data[1] == 2:
             pass
         elif data[1] == 3:
@@ -78,7 +86,7 @@ def handle_incoming_message(data,lock:threading.Lock):
             pass
 
 
-def b_recv_messages_thread_f(socket: BluetoothSocket, lock:threading.Lock):
+def b_recv_messages_thread_f(socket: BluetoothSocket, lock: threading.Lock):
     print(type(socket))
     global mode
     try:
@@ -98,7 +106,7 @@ def b_recv_messages_thread_f(socket: BluetoothSocket, lock:threading.Lock):
             mode = -1
 
 
-def auto_control(client_sock: BluetoothSocket):
+def auto_control(client_sock: BluetoothSocket,lock):
     client_sock.send(add_crc(autoControlCommand))
     img = cv2.imread("labyrinth.png", cv2.IMREAD_GRAYSCALE)
     byte_array = image_to_byte_array(img)
@@ -109,7 +117,7 @@ def auto_control(client_sock: BluetoothSocket):
         image = False
     x = 0
     y = 40
-    while mode == 1:
+    while True:
         if x > 1000:
             x = 0
         if y > 1500:
@@ -117,12 +125,33 @@ def auto_control(client_sock: BluetoothSocket):
         x += 5
         y += 5
         client_sock.send(coord_to_byte_arr_with_crc(x, y))
-        time.sleep(0.1)
+        time.sleep(0.02)
+        with lock:
+            if mode!=1:
+                break
 
 
-def exchange(socket: BluetoothSocket,lock):
 
-    thread = threading.Thread(target=b_recv_messages_thread_f, args=(socket,lock))
+def send_angles(angles):
+    print("angles:", angles.roll, angles.pitch)
+
+
+def manual_control(socket:BluetoothSocket, lock):
+    socket.send(add_crc(manualControlCommand))
+    while True:
+        with lock:
+            if mode != 2:
+                break
+    try:
+        angles = queue_angles.get(True,0.02)
+        send_angles(angles)
+    except queue.Empty:
+        pass
+
+
+
+def exchange(socket: BluetoothSocket, lock):
+    thread = threading.Thread(target=b_recv_messages_thread_f, args=(socket, lock))
     thread.start()
     global image
     global mode
@@ -131,9 +160,9 @@ def exchange(socket: BluetoothSocket,lock):
         while True:
             with lock:
                 mode_local = mode
-            if mode_local!=4:
-                is_first_waiting=True
-            if mode_local ==0:
+            if mode_local != 4:
+                is_first_waiting = True
+            if mode_local == 0:
                 time.sleep(0.02)
                 continue
             elif mode_local == -1:
@@ -146,8 +175,9 @@ def exchange(socket: BluetoothSocket,lock):
                 break
             elif mode_local == 1:
                 image = True
-                auto_control(socket)
+                auto_control(socket,lock)
             elif mode_local == 2:
+                manual_control(socket,lock)
                 pass
             elif mode_local == 3:
                 pass
