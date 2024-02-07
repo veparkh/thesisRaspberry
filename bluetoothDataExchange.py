@@ -7,12 +7,12 @@ import zlib
 import queue
 from bluetooth import BluetoothSocket
 from dataclasses import dataclass
-
-
+import uartDataExchange
 @dataclass
 class Angles:
     roll: float
     pitch: float
+
 
 queue_angles = queue.Queue()
 
@@ -77,7 +77,7 @@ def handle_incoming_message(data, lock: threading.Lock):
     if data[0] == 100 and data[1] in range(1, 5):
         if data[1] == 1:
             angles = byte_array_to_angles(data[2:])
-            print("angles:",angles.roll,angles.pitch)
+            print("angles:", angles.roll, angles.pitch)
         elif data[1] == 2:
             pass
         elif data[1] == 3:
@@ -106,7 +106,7 @@ def b_recv_messages_thread_f(socket: BluetoothSocket, lock: threading.Lock):
             mode = -1
 
 
-def auto_control(client_sock: BluetoothSocket,lock):
+def auto_control(client_sock: BluetoothSocket, lock):
     client_sock.send(add_crc(autoControlCommand))
     img = cv2.imread("labyrinth.png", cv2.IMREAD_GRAYSCALE)
     byte_array = image_to_byte_array(img)
@@ -126,28 +126,32 @@ def auto_control(client_sock: BluetoothSocket,lock):
         y += 5
         client_sock.send(coord_to_byte_arr_with_crc(x, y))
         time.sleep(0.02)
-        with lock:
-            if mode!=1:
-                break
 
+        with uartDataExchange.lock_is_UART_connected:
+            if uartDataExchange.is_UART_connected:
+                uartDataExchange.queue_task.put(bytearray(struct.pack(">ff", 90,-90)))
+        with lock:
+            if mode != 1:
+                break
 
 
 def send_angles(angles):
     print("angles:", angles.roll, angles.pitch)
 
 
-def manual_control(socket:BluetoothSocket, lock):
+def manual_control(socket: BluetoothSocket, lock):
     socket.send(add_crc(manualControlCommand))
     while True:
         with lock:
             if mode != 2:
                 break
     try:
-        angles = queue_angles.get(True,0.02)
-        send_angles(angles)
+        angles = queue_angles.get(True, 0.02)
+        with uartDataExchange.lock_is_UART_connected:
+            if uartDataExchange.is_UART_connected:
+                uartDataExchange.queue_task.put(bytearray(struct.pack(">ff", 90, -90)))
     except queue.Empty:
         pass
-
 
 
 def exchange(socket: BluetoothSocket, lock):
@@ -175,9 +179,9 @@ def exchange(socket: BluetoothSocket, lock):
                 break
             elif mode_local == 1:
                 image = True
-                auto_control(socket,lock)
+                auto_control(socket, lock)
             elif mode_local == 2:
-                manual_control(socket,lock)
+                manual_control(socket, lock)
                 pass
             elif mode_local == 3:
                 pass
