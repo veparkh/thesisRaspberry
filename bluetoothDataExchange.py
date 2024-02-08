@@ -36,9 +36,8 @@ def byte_array_to_angles(arr: bytearray):
 
 
 def coord_to_byte_arr_with_crc(x: float, y: float):
-    arr1 = bytearray(struct.pack(">f", x))
-    arr2 = bytearray(struct.pack(">f", y))
-    return add_crc(coordCommand + arr1 + arr2)
+    arr = bytearray(struct.pack(">ff", x, y))
+    return add_crc(coordCommand + arr)
 
 
 def is_correct_crc(arr: bytearray):

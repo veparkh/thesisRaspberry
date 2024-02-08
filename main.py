@@ -1,7 +1,10 @@
 import threading
+from time import sleep
 
 import bluetooth
 import cv2
+import serial.tools.list_ports
+
 from uartDataExchange import uart_thread
 import bluetoothDataExchange
 from bluetoothDataExchange import exchange, add_crc, count_crc, is_correct_crc, coord_to_byte_arr_with_crc
