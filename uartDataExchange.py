@@ -55,7 +55,7 @@ def uart_thread():
             while True:
                 try:
                     # bytes_task = queue_task.get(True,1000)
-                    bytes_task = bytes(struct.pack("<ff", 0x0fffffff, -90.0))
+                    bytes_task = bytes(struct.pack("<ff", 235.0, -90.0))
                     time.sleep(0.5)
                 except queue.Empty:
                     pass
