@@ -21,6 +21,7 @@ print("Waiting for connection on RFCOMM channel", port)
 lock_mode = threading.Lock()
 thread = threading.Thread(target=uart_thread)
 thread.start()
+
 while True:
     client_sock, client_info = server_sock.accept()  # Цикл на подключение разных устройств
     print("Accepted connection from", client_info)

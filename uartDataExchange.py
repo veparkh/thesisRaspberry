@@ -3,7 +3,7 @@ import threading
 import time
 import queue
 from multiprocessing.connection import answer_challenge
-
+from bluetoothDataExchange import Angles
 import serial.tools.list_ports
 
 initial_bytes = bytes([0xFA, 0xD3, 0x0F])
@@ -51,20 +51,25 @@ def uart_thread():
                 continue
             with lock_is_UART_connected:
                 is_UART_connected = True
+            print("here")
             ser.timeout = 1.0
+            print("2here")
             while True:
                 try:
-                    # bytes_task = queue_task.get(True,1000)
-                    bytes_task = bytes(struct.pack("<ff", 235.0, -90.0))
-                    time.sleep(0.5)
-                except queue.Empty:
+                    angles = queue_task.get(True,1)
+                    if angles is not Angles:
+                        print("wrong type")
+                    print("angles", angles)
+                    bytes_task = bytes(struct.pack("<ff", angles.pitch, angles.roll))
+                    print("bytes_task", bytes_task)
+                except queue.Empty as e:
+                    print("3 here", e)
                     pass
                 ser.write(bytes_task)
                 position_answer = ser.read(3)
-                print("answer pos:", position_answer)
                 if position_answer != position_answer_bytes:
                     break
-        except Exception as e:
+        except ZeroDivisionError as e:
             with lock_is_UART_connected:
                 is_UART_connected = False
             print("uart thread exception:", str(e))

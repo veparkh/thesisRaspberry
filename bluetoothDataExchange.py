@@ -76,7 +76,8 @@ def handle_incoming_message(data, lock: threading.Lock):
     if data[0] == 100 and data[1] in range(1, 5):
         if data[1] == 1:
             angles = byte_array_to_angles(data[2:])
-            print("angles:", angles.roll, angles.pitch)
+            #print("angles:", angles.roll, angles.pitch)
+            queue_angles.put(angles)
         elif data[1] == 2:
             pass
         elif data[1] == 3:
@@ -91,7 +92,7 @@ def b_recv_messages_thread_f(socket: BluetoothSocket, lock: threading.Lock):
     try:
         while True:
             data = socket.recv(20)
-            print(data, len(data))
+            #print(data, len(data))
             if data is None or len(data) == 0:
                 print("data is None")
                 with lock:
@@ -128,9 +129,12 @@ def auto_control(client_sock: BluetoothSocket, lock):
 
         with uartDataExchange.lock_is_UART_connected:
             if uartDataExchange.is_UART_connected:
-                uartDataExchange.queue_task.put(bytearray(struct.pack(">ff", 90,-90)))
+                uartDataExchange.queue_task.put(Angles(roll=32.245, pitch=-36.576))
         with lock:
             if mode != 1:
+                with uartDataExchange.lock_is_UART_connected:
+                    if uartDataExchange.is_UART_connected:
+                        uartDataExchange.queue_task.put(Angles(0,0))
                 break
 
 
@@ -140,20 +144,27 @@ def send_angles(angles):
 
 def manual_control(socket: BluetoothSocket, lock):
     socket.send(add_crc(manualControlCommand))
+    global mode
     while True:
         with lock:
             if mode != 2:
+                with uartDataExchange.lock_is_UART_connected:
+                    if uartDataExchange.is_UART_connected:
+                        uartDataExchange.queue_task.put(Angles(0, 0))
                 break
-    try:
-        angles = queue_angles.get(True, 0.02)
-        with uartDataExchange.lock_is_UART_connected:
-            if uartDataExchange.is_UART_connected:
-                uartDataExchange.queue_task.put(bytearray(struct.pack(">ff", 90, -90)))
-    except queue.Empty:
-        pass
+        try:
+            angles = queue_angles.get(True, 1)
+            print(f"angles type {type(angles)} {angles}")
+            with uartDataExchange.lock_is_UART_connected:
+                if uartDataExchange.is_UART_connected:
+                    uartDataExchange.queue_task.put(Angles(angles.pitch[0], angles.roll[0]))
+        except queue.Empty:
+            print("manual control exception")
+            pass
 
 
-def exchange(socket: BluetoothSocket, lock):
+def exchange(socket: BluetoothSocket, lock: threading.Lock):
+    print("locked", lock.locked())
     thread = threading.Thread(target=b_recv_messages_thread_f, args=(socket, lock))
     thread.start()
     global image
