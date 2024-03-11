@@ -24,7 +24,7 @@ def get_port():
             try:
                 ser = serial.Serial(port.device, baudrate=115200, bytesize=8, parity='N',
                                     stopbits=1, timeout=1, xonxoff=False, rtscts=False, writeTimeout=1)
-                ser.timeout = 0.7
+                ser.timeout = 0.4
                 ser.write(initial_bytes)
                 answer = ser.read(3)
                 print("answer", answer)
