@@ -59,9 +59,9 @@ def uart_thread():
                     angles = queue_task.get(True,1)
                     if angles is not Angles:
                         print("wrong type")
-                    print("angles", angles)
+                    #print("angles", angles)
                     bytes_task = bytes(struct.pack("<ff", angles.pitch, angles.roll))
-                    print("bytes_task", bytes_task)
+                    #print("bytes_task", bytes_task)
                 except queue.Empty as e:
                     print("3 here", e)
                     pass

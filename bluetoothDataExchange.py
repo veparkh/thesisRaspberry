@@ -1,3 +1,4 @@
+from datetime import datetime
 import struct
 import threading
 import time
@@ -8,6 +9,8 @@ import queue
 from bluetooth import BluetoothSocket
 from dataclasses import dataclass
 import uartDataExchange
+
+
 @dataclass
 class Angles:
     roll: float
@@ -76,7 +79,9 @@ def handle_incoming_message(data, lock: threading.Lock):
     if data[0] == 100 and data[1] in range(1, 5):
         if data[1] == 1:
             angles = byte_array_to_angles(data[2:])
-            #print("angles:", angles.roll, angles.pitch)
+            # print("angles:", angles.roll, angles.pitch)
+
+            print("time", datetime.now(), "     ", angles)
             queue_angles.put(angles)
         elif data[1] == 2:
             pass
@@ -87,12 +92,13 @@ def handle_incoming_message(data, lock: threading.Lock):
 
 
 def b_recv_messages_thread_f(socket: BluetoothSocket, lock: threading.Lock):
+    datetime.utcnow().strftime('%F %T.%f')[:-3]
     print(type(socket))
     global mode
     try:
         while True:
             data = socket.recv(20)
-            #print(data, len(data))
+            print("длина пакета", len(data))
             if data is None or len(data) == 0:
                 print("data is None")
                 with lock:
@@ -134,12 +140,8 @@ def auto_control(client_sock: BluetoothSocket, lock):
             if mode != 1:
                 with uartDataExchange.lock_is_UART_connected:
                     if uartDataExchange.is_UART_connected:
-                        uartDataExchange.queue_task.put(Angles(0,0))
+                        uartDataExchange.queue_task.put(Angles(0, 0))
                 break
-
-
-def send_angles(angles):
-    print("angles:", angles.roll, angles.pitch)
 
 
 def manual_control(socket: BluetoothSocket, lock):
@@ -154,7 +156,7 @@ def manual_control(socket: BluetoothSocket, lock):
                 break
         try:
             angles = queue_angles.get(True, 1)
-            print(f"angles type {type(angles)} {angles}")
+            #print(f"angles {angles}")
             with uartDataExchange.lock_is_UART_connected:
                 if uartDataExchange.is_UART_connected:
                     uartDataExchange.queue_task.put(Angles(angles.pitch[0], angles.roll[0]))
