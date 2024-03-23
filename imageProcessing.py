@@ -3,20 +3,14 @@ import cv2 as cv
 import numpy as np
 
 
-def highlight_color(img):
-    original = img.copy()
+def highlight_color(img, lower, upper):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-    lower = np.array([90, 40, 140])
-    upper = np.array([140, 255, 255])
     mask = cv.inRange(hsv, lower, upper)
-    # mask = cv2.dilate(mask,(3,3),anchor = (-1,-1),iterations=11,borderType=cv2.BORDER_DEFAULT)
-    result = cv.bitwise_and(original, original, mask=mask)
-    cv2.imshow("color transformation", result)
-    return result
+    return mask
 
 
 def image_handler():
-    cap = cv.VideoCapture(0)
+    cap = cv.VideoCapture(1)
     ret, frame = cap.read()
     while True:
         ret, frame = cap.read()
@@ -231,3 +225,23 @@ def pathHighlight(img, path):
         w0 = size * coordinate[1]
         img[h0:h, w0:w] = img[h0:h, w0:w] - 50
     return img
+
+
+def find_maze_rectangle(img):
+    pass
+
+
+def maze_solver():
+    cap = cv.VideoCapture(1)
+    ret, frame = cap.read()
+    shape = frame.shape
+    frame = frame[:, int(0.2 * shape[1]):int(0.8 * shape[1])]
+    print()
+    img_hsv = highlight_color(frame, np.array([0, 0, 0]), np.array([179, 200, 105]))
+    img_cleared = cv2.morphologyEx(img_hsv, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    cv2.imshow("walls_hsv_cleared", img_cleared)
+    cv2.imwrite("roi.png", img_cleared)
+    cv2.waitKey(0)
+
+
+maze_solver()
