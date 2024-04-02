@@ -1,10 +1,14 @@
+import math
+
 import cv2
 import cv2 as cv
 import numpy as np
+from cv2 import threshold
 
 
 def highlight_color(img, lower, upper):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    cv2.imwrite("roi.png", img)
     mask = cv.inRange(hsv, lower, upper)
     return mask
 
@@ -57,17 +61,15 @@ def findBlockLines(img):
     return horLinesFiltered, verLinesFiltered
 
 
-def findPathMatrix():
-    labyrImg = cv2.imread("labyrinth3.png", cv2.IMREAD_GRAYSCALE)
-    labyrImg = 255 - labyrImg
-    cv2.imshow("orig", labyrImg)
-    _, labyrImg = cv2.threshold(labyrImg, 150, 255, cv2.THRESH_BINARY)
-    cv2.imshow("thresh", labyrImg)
-
-    horLines, verLines = findBlockLines(labyrImg)
+def findPathMatrix(img):
+    cv2.imshow("orig", img)
+    _, labyrImg = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY)
+    cv2.imshow("thresh", img)
+    cv2.waitKey(0)
+    horLines, verLines = findBlockLines(img)
 
     # paths = np.zeros(shape=(len(horizontalLines), len(verticalLines)))
-    findInputs(horLines, verLines, labyrImg)
+    findInputs(horLines, verLines, img)
     cv2.waitKey(0)
 
 
@@ -102,6 +104,7 @@ def findInputs(horLines, verLines, img):
     point1 = (0, 0)
     point2 = (0, 0)
     for i in range(0, len(verLines) - 1):
+        cv2.waitKey(0)
         topBlock = img[int(horLines[0][0]):int(horLines[1][0] / 2), int(verLines[i][0]):int(verLines[i + 1][0] + 2)]
         line = cv2.HoughLines(topBlock, 0.2, np.pi / 180, 15)
         if (line is None):
@@ -227,21 +230,201 @@ def pathHighlight(img, path):
     return img
 
 
-def find_maze_rectangle(img):
-    pass
+def detect_maze_coarse_borders(img):
+
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    cv2.imwrite("maze_hsv.jpeg", img_hsv)
+    img_lines = np.zeros_like(img_hsv)
+    lower_red = np.array([0, 20, 60], dtype="uint8")
+    upper_red = np.array([140, 90, 100], dtype="uint8")
+    img_borders = cv2.inRange(img_hsv, lower_red, upper_red)
+    img_dilated = cv2.dilate(img_borders,borderType=cv2.BORDER_REPLICATE,anchor=(0,0),kernel=np.ones((3,3),np.uint8))
+    img_closed = cv2.morphologyEx(img_borders,borderType=cv2.BORDER_DEFAULT,kernel=np.ones((3,3), dtype=np.uint8),anchor=(0,0),iterations=4,op = cv2.MORPH_CLOSE)
+    cv2.imshow("closed", img_closed)
+    cv2.imshow("dilated", img_dilated)
+    img_Canny = cv2.Canny(img_closed,threshold1=100,threshold2=200)
+    cv2.imshow("canny", img_Canny)
+    cv2.imshow("im_bound",img_borders)
+    cv2.waitKey(0)
+    left = 20000
+    right = 0
+    bottom = 0
+    top = 20000
+    lines = cv.HoughLines(img_Canny, 1, np.pi / 180, 70, None, 0, 0)
+    print(f"len size {len(lines)}")
+    if lines is not None:
+        for i in range(0, len(lines)):
+            rho = lines[i][0][0]
+            theta = lines[i][0][1]
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            print(f"x0 {x0} y0 {y0} theta {theta}")
+            if -0.2 <= theta <= 0.2:
+                if right < x0:
+                    right = x0
+                if left > x0:
+                    left = x0
+            elif 1.47 <= theta <= 1.67:
+                if bottom < y0:
+                    bottom = y0
+                if top > y0:
+                    top = y0
+            pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
+            pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+            cv.line(img_lines, pt1, pt2, (0, 0, 255), 3, cv.LINE_AA)
+        print(f"bottom {bottom}  top {top} left {left} right {right}")
+        cv2.imshow("lines",img_lines)
+        cv2.waitKey(0)
+        return img[int(top-40):int(bottom+40),int(left-40):int(right+40)]
+
+def get_path_matrix(img):
+
+
+
+    step = 3
+    # vertical_lines_amount = round(img_thresh.shape[0]/step)
+    # horizontal_lines_amount = round(img_thresh.shape[1] / step)
+    # A = np.zeros((vertical_lines_amount,horizontal_lines_amount), np.uint8)
+    # for i in range(0, vertical_lines_amount-1):
+    #     for j in range(0, horizontal_lines_amount-1):
+    #         block = img_thresh[i*step:(i+1)*step,j*step:(j+1)*step]
+    #         print(cv2.countNonZero(block))
+    #         if cv2.countNonZero(block)/(step * step)>0.5:
+    #             A[i,j] = 255
+    # cv2.imshow("A",A)
+    # cv2.imwrite("A.png",A)
+    cv2.waitKey(0)
+
+
+def detect_maze_fine_boarders(img):
+
+    img_binary =cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _,img_thresh = cv2.threshold(img_binary, 90, 255, cv2.THRESH_BINARY_INV)
+    cv2.imwrite("thresh.png", img_thresh)
+    img_closed = cv2.morphologyEx(img_thresh, borderType=cv2.BORDER_DEFAULT, kernel=np.ones((1, 3), dtype=np.uint8),
+                                  anchor=(0, 0), iterations=4, op=cv2.MORPH_CLOSE)
+    cv2.imshow("thresh",img_thresh)
+    cv2.imshow("closed",img_closed)
+
+    img_canny = cv2.Canny(img_thresh,100,200,3)
+    cv2.imshow("img_canny", img_canny)
+    cv2.waitKey(0)
+    # lines = cv.HoughLines(img_canny, 1, np.pi / 180, 190, None, 0, 0)
+    img_ver_lines = np.copy(img_canny)
+    img_hor_lines = np.copy(img_canny)
+    # left_1 = 1000
+    # left_2 = 1000
+    # if lines is not None:
+    #     for i in range(0, len(lines)):
+    #         rho = lines[i][0][0]
+    #         theta = lines[i][0][1]
+    #         a = math.cos(theta)
+    #         b = math.sin(theta)
+    #         x0 = a * rho
+    #         y0 = b * rho
+    #         pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
+    #         pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+    #         if left_1>x0:
+    #             left_2 = left_1
+    #             left_1 = x0
+    #         if left_2>x0 and left_1!=x0:
+    #             left_2 = x0
+    #         cv.line(img_hor_lines, pt1, pt2, (255), 1, cv.LINE_AA)
+    #
+    # top_1 = 1000
+    # top_2 = 1000
+    # lines = cv.HoughLines(img_canny, 1, np.pi / 180, 70, None, 0, 0)
+    # if lines is not None:
+    #     for i in range(0, len(lines)):
+    #         rho = lines[i][0][0]
+    #         theta = lines[i][0][1]
+    #         a = math.cos(theta)
+    #         b = math.sin(theta)
+    #         x0 = a * rho
+    #         y0 = b * rho
+    #         pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
+    #         pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+    #         if 1.47<theta<1.67:
+    #             if top_1>y0:
+    #                 top_2 = top_1
+    #                 top_1 = y0
+    #             if top_2>y0 and (abs(top_1-y0)>5):
+    #                 top_2= y0
+    #             cv.line(img_ver_lines, pt1, pt2, (255), 1, cv.LINE_AA)
+    #
+    # print("point", int((top_1+top_2)/2),int((left_1+left_2)/2))
+    # img_marker = cv2.drawMarker(img_canny,( int((left_1 + left_2) / 2),int((top_1 + top_2) / 2)),255)
+    #
+    # cv2.imshow("img_ver_lines", img_ver_lines)
+    # cv2.imshow("img_hor_lines", img_hor_lines)
+    cv2.imshow("canny",img_canny)
+    lines = cv.HoughLines(img_canny, 1, np.pi / 180, 100, None, 0, 0)
+    theta_aver = 0
+    if lines is not None:
+        for i in range(0, len(lines)):
+            rho = lines[i][0][0]
+            theta = lines[i][0][1]
+            a = math.cos(theta)
+            b = math.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
+            pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+            if -0.3<theta<0.3:
+                theta_aver += theta/len(lines)
+    print(f"theta_aver {theta_aver}")
+    M = cv2.getRotationMatrix2D((img_canny.shape[1] / 2, img_canny.shape[0] / 2), theta_aver*180/3.1415, 1)
+    img_rotated = cv2.warpAffine(img_thresh, M, (img_canny.shape[1], img_canny.shape[0]))
+    cv2.imshow("rotated",img_rotated)
+    cv2.waitKey(0)
+    img_final_cut = np.copy(img_rotated)
+    rows,cols = img_final_cut.shape
+    for i in range(0,cols):
+        slice_left = img_final_cut[:,i]
+        if cv2.countNonZero(slice_left)>0.7*rows:
+            img_final_cut = img_final_cut[:,i+1:cols]
+            break
+    rows, cols = img_final_cut.shape
+    for i in range(1,cols):
+        slice_right = img_final_cut[:,cols-i]
+        if cv2.countNonZero(slice_right)>0.7*rows:
+            img_final_cut = img_final_cut[:,0:cols-(i+1)]
+            break
+    rows, cols = img_final_cut.shape
+    for i in range(1,rows):
+        slice_top = img_final_cut[i,:]
+        if cv2.countNonZero(slice_top)>0.7*cols:
+            img_final_cut = img_final_cut[i+1:rows,:]
+            break
+    rows, cols = img_final_cut.shape
+    for i in range(1,rows):
+        slice_bottom = img_final_cut[rows-i,:]
+        if cv2.countNonZero(slice_bottom)>0.7*cols:
+            img_final_cut = img_final_cut[0:rows-(i+1),:]
+            break
+    cv2.imshow("cut_final_img",img_final_cut)
+    cv2.waitKey(0)
+    return img
 
 
 def maze_solver():
     cap = cv.VideoCapture(1)
     ret, frame = cap.read()
-    shape = frame.shape
-    frame = frame[:, int(0.2 * shape[1]):int(0.8 * shape[1])]
-    print()
-    img_hsv = highlight_color(frame, np.array([0, 0, 0]), np.array([179, 200, 105]))
-    img_cleared = cv2.morphologyEx(img_hsv, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
-    cv2.imshow("walls_hsv_cleared", img_cleared)
-    cv2.imwrite("roi.png", img_cleared)
+    cv2.imwrite("maze.jpeg",frame)
+    cv2.imshow(" org", frame)
+    img_cropped = frame[:, int(frame.shape[1] * 0.16):int(frame.shape[1] * 0.84)]
+
+    cv2.imshow(" cropped img", img_cropped)
+    img_blured = cv2.bilateralFilter(img_cropped,d=5,sigmaSpace=20,sigmaColor=20)
+    cv2.imshow("cropped and blured",img_blured)
+    img_coarse = detect_maze_coarse_borders(img_blured)
+    img = detect_maze_fine_boarders(img_coarse)
+    cv2.imshow(" cropped img", img)
     cv2.waitKey(0)
+    A = get_path_matrix(img)
+
 
 
 maze_solver()
