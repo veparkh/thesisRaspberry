@@ -2,6 +2,7 @@ import math
 
 import cv2
 import cv2 as cv
+import numpy
 import numpy as np
 from cv2 import threshold
 
@@ -281,20 +282,18 @@ def detect_maze_coarse_borders(img):
 
 def get_path_matrix(img):
 
-
-
     step = 3
-    # vertical_lines_amount = round(img_thresh.shape[0]/step)
-    # horizontal_lines_amount = round(img_thresh.shape[1] / step)
-    # A = np.zeros((vertical_lines_amount,horizontal_lines_amount), np.uint8)
-    # for i in range(0, vertical_lines_amount-1):
-    #     for j in range(0, horizontal_lines_amount-1):
-    #         block = img_thresh[i*step:(i+1)*step,j*step:(j+1)*step]
-    #         print(cv2.countNonZero(block))
-    #         if cv2.countNonZero(block)/(step * step)>0.5:
-    #             A[i,j] = 255
-    # cv2.imshow("A",A)
-    # cv2.imwrite("A.png",A)
+    vertical_lines_amount = round(img.shape[0]/step)
+    horizontal_lines_amount = round(img.shape[1] / step)
+    A = np.zeros((vertical_lines_amount,horizontal_lines_amount), np.uint8)
+    for i in range(0, vertical_lines_amount-1):
+        for j in range(0, horizontal_lines_amount-1):
+            block = img[i*step:(i+1)*step,j*step:(j+1)*step]
+            print(cv2.countNonZero(block))
+            if cv2.countNonZero(block)/(step * step)>0.5:
+                A[i,j] = 255
+    cv2.imshow("A",A)
+    cv2.imwrite("A.png",A)
     cv2.waitKey(0)
 
 
@@ -405,25 +404,112 @@ def detect_maze_fine_boarders(img):
             img_final_cut = img_final_cut[0:rows-(i+1),:]
             break
     cv2.imshow("cut_final_img",img_final_cut)
-    cv2.waitKey(0)
-    return img
+    cv2.imwrite("fime_borders.png",img_final_cut)
+    return img_final_cut
+
+def detect_table(img):
+    img_binary = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, img_thresh = cv2.threshold(img_binary,160,255,cv2.THRESH_BINARY)
+    cv2.imshow("img_thresh",img_thresh)
+    img_contours = np.zeros_like(img_thresh)
+    img_erosed = cv2.erode(img_thresh,kernel=np.ones((3, 3), np.uint8),anchor=(0,0),iterations=1)
+    cv2.imshow("img_erosed", img_erosed)
+
+    contours, hierarchy = cv.findContours(img_erosed, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(img_contours, contours=contours, hierarchy=hierarchy, contourIdx=-1, color=255)
+    cv2.imshow("img_contours",img_contours)
+    if len(contours) != 0:
+        c = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+        return img[y-10:y + h+10, x-10:x + w+10]
+    return None
+
+def detect_maze_boarders(img):
+    img_blurred = cv2.GaussianBlur(img,ksize=(5,5),sigmaX=1,sigmaY=1)
+    img_bin = cv2.cvtColor(img_blurred, cv2.COLOR_BGR2GRAY)
+    thtesh,img_thresh = cv2.threshold(img_bin,100,255, cv2.THRESH_OTSU)
+    print(f"thresh {thtesh}")
+    cv2.imshow("imgfd",img_thresh)
+    img_lines = np.zeros_like(img_thresh)
+    lsd = cv2.createLineSegmentDetector(0)
+    lines = lsd.detect(img_thresh)[0]  # Position 0 of the returned tuple are the detected lines
+    drawn_img = numpy.zeros_like(img_lines)
+    drawn_img = lsd.drawSegments(drawn_img, lines)
+    cv2.imshow("LSD", drawn_img)
+    pass
+
+def flatten_table(img):
+    cv2.imshow("flatten_table", img)
+    img_blurred = cv2.GaussianBlur(img, ksize=(5, 5), sigmaX=1, sigmaY=1)
+    cv2.imwrite("img_blurred.png",img_blurred)
+    cv2.imshow("img_blurred", img_blurred)
+    img_bin = cv2.cvtColor(img_blurred, cv2.COLOR_BGR2GRAY)
+    img_canny = cv2.Canny(img_bin,70,210)
+    cv2.imshow("img_canny", img_canny)
+    circles = cv.HoughCircles(img_canny, cv.HOUGH_GRADIENT, 1, 80,
+                              param1=20, param2=7, minRadius=5, maxRadius=10)
+    print(circles)
+    circles = np.uint16(np.around(circles))
+    thresh, img_thresh = cv2.threshold(img_bin, 40, 255, cv2.THRESH_BINARY)
+
+    for i in circles[0, :]:
+        # draw the outer circle
+        cv.circle(img_thresh, (i[0], i[1]), i[2], 120, 2)
+        # draw the center of the circle
+        cv.circle(img_thresh, (i[0], i[1]), 2, 120, 3)
+
+    print(len(circles[0]))
+    cv2.imshow("img_thresh ", img_thresh)
+    circles_coord = [[x[0], x[1]] for x in circles[0, :]]
+    if len(circles_coord) < 4:
+        cv2.waitKey(0)
+    if len(circles_coord)>4:
+        x_sort = sorted(circles_coord, key=lambda x: x[0])
+        circles_coord = x_sort[:2] + x_sort[-2:]
+    x_sort = sorted(circles_coord, key=lambda x: x[0])
+    left_sorted = sorted(x_sort[:2], key=lambda x: x[1])
+    right_sorted = sorted(x_sort[2:], key=lambda x: x[1])
+    initial_points = [left_sorted[0], left_sorted[1],right_sorted[1],right_sorted[0]]# left_top, bottom-top,right_bottom
+    print(f"initial points {initial_points}")
+    M = cv.getPerspectiveTransform(np.float32(initial_points), np.float32([[0, 376], [0, 0], [376, 0], [376, 376]]))
+    img_aligned = cv.warpPerspective(img, M, (376, 376))
+    cv2.imshow("img_aligned", img_aligned)
+    cv2.imwrite("img_aligned.png", img_aligned)
+    img_grid = np.copy(img_aligned)
+    n = 18
+    step = 376/18
+    for i in range(0, n+1):
+        for j in range(0, n+1):
+            img_grid = cv2.circle(img_grid,(int(j*step),int(i*step)),2,thickness=1,color=(0,255,0))
+    cv2.imshow("grid", img_grid)
+
+
+
+
+
 
 
 def maze_solver():
     cap = cv.VideoCapture(1)
-    ret, frame = cap.read()
-    cv2.imwrite("maze.jpeg",frame)
-    cv2.imshow(" org", frame)
-    img_cropped = frame[:, int(frame.shape[1] * 0.16):int(frame.shape[1] * 0.84)]
+    while True:
+        ret, frame = cap.read()
+        cv2.imshow(" org", frame)
+        img_table = detect_table(frame)
+        if img_table is not None:
+            flatten_table(img_table)
+            # img_maze = detect_maze_boarders(img_table)
 
-    cv2.imshow(" cropped img", img_cropped)
-    img_blured = cv2.bilateralFilter(img_cropped,d=5,sigmaSpace=20,sigmaColor=20)
-    cv2.imshow("cropped and blured",img_blured)
-    img_coarse = detect_maze_coarse_borders(img_blured)
-    img = detect_maze_fine_boarders(img_coarse)
-    cv2.imshow(" cropped img", img)
-    cv2.waitKey(0)
-    A = get_path_matrix(img)
+        cv2.waitKey(30)
+    # img_cropped = frame[:, int(frame.shape[1] * 0.16):int(frame.shape[1] * 0.84)]
+    #
+    # cv2.imshow(" cropped img", img_cropped)
+    # img_blured = cv2.bilateralFilter(img_cropped,d=5,sigmaSpace=20,sigmaColor=20)
+    # cv2.imshow("cropped and blured",img_blured)
+    # img_coarse = detect_maze_coarse_borders(img_blured)
+    # img = detect_maze_fine_boarders(img_coarse)
+    # cv2.imshow(" cropped img", img)
+    # cv2.waitKey(0)
+    # A = get_path_matrix(img)
 
 
 
