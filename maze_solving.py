@@ -85,27 +85,36 @@ class Maze:
                 break
             zero_shift_top += 1
 
-        for i in range(rows-1,-1,-1):
-            if np.any(self.path_matrix[i,:]):
+        for i in range(rows - 1, -1, -1):
+            if np.any(self.path_matrix[i, :]):
                 break
             zero_shift_bottom += 1
 
         for i in range(0, cols):
-            if np.any(self.path_matrix[:,i]):
+            if np.any(self.path_matrix[:, i]):
                 break
             zero_shift_left += 1
-        for i in range(cols-1,-1,-1):
-            if np.any(self.path_matrix[:,i]):
+        for i in range(cols - 1, -1, -1):
+            if np.any(self.path_matrix[:, i]):
                 break
             zero_shift_right += 1
         print("path 2", self.path_matrix)
-        for ind, val in enumerate(self.path_matrix[zero_shift_top+1]):
-            if val & self._bottom:
-                return zero_shift_top, ind
-        for ind, val in enumerate(self.path_matrix[rows - zero_shift_bottom - 1]):
-            if val & self._top:
-                return zero_shift_bottom, ind
-            return None
+        pm_without_zeros_edges = self.path_matrix[zero_shift_top + 1:-(zero_shift_bottom + 1), zero_shift_left + 1:-(zero_shift_right + 1)]
+        cv2.waitKey(0)
+        output = []
+        for ind, val in enumerate(pm_without_zeros_edges[0]):
+            if not val & self._top:
+                output.append([zero_shift_top, zero_shift_left + ind])
+        for ind, val in enumerate(pm_without_zeros_edges[-1]):
+            if not val & self._bottom:
+                output.append([rows - zero_shift_bottom - 1, zero_shift_left + ind + 1])
+        for ind, val in enumerate(pm_without_zeros_edges[:, 0]):
+            if not val & self._left:
+                output.append([zero_shift_top + ind, zero_shift_left])
+        for ind, val in enumerate(pm_without_zeros_edges[:, -1]):
+            if not val & self._right:
+                output.append([zero_shift_top + ind, cols - zero_shift_right - 1])
+        return output
 
     def solveMethod(self, origImg, entryPoint):
         edges = np.copy(self.path_matrix)
@@ -122,40 +131,40 @@ class Maze:
             h, w = sp[p][0], sp[p][1]
             print(h, w)
             # h stands for height and w stands for width
-            if sp[-1] == list(entryPoint[1]):
+            if sp[-1] in list(entryPoint[1]):
                 break
-            if edges[h][w] > 0:
+            if edges[h][w] < 0b1111:
                 rec.append(len(sp))
-            if edges[h][w] & self._top:
+            if not edges[h][w] & self._top:
                 # If this edges is open upwards
-                edges[h][w] &= ~self._top
+                edges[h][w] |= self._top
                 h = h - 1
                 sp.append([h, w])
-                edges[h][w] &= ~self._bottom
+                edges[h][w] |= self._bottom
                 p = p + 1
                 continue
-            if edges[h][w] & self._bottom:
+            if not edges[h][w] & self._bottom:
                 # If the edges is open downward
-                edges[h][w] &= ~self._bottom
+                edges[h][w] |= self._bottom
                 h = h + 1
                 sp.append([h, w])
-                edges[h][w] &= ~self._top
+                edges[h][w] |= self._top
                 p = p + 1
                 continue
-            if edges[h][w] & self._left:
+            if not edges[h][w] & self._left:
                 # If the edges is open left
-                edges[h][w] &= ~self._left
+                edges[h][w] |= self._left
                 w = w - 1
                 sp.append([h, w])
-                edges[h][w] &= ~self._right
+                edges[h][w] |= self._right
                 p = p + 1
                 continue
-            if edges[h][w] & self._right:
+            if not edges[h][w] & self._right:
                 # If the edges is open right
-                edges[h][w] &= ~self._right
+                edges[h][w] |= self._right
                 w = w + 1
                 sp.append([h, w])
-                edges[h][w] &= ~self._left
+                edges[h][w] |= self._left
                 p = p + 1
                 continue
             else:
@@ -172,9 +181,9 @@ class Maze:
     def pathHighlight(self, img, path):
         size = img.shape[0] / self.lines_count
         for coordinate in path:
-            h = size * (coordinate[0] + 1)
-            w = size * (coordinate[1] + 1)
-            h0 = size * coordinate[0]
-            w0 = size * coordinate[1]
+            h = round(size * (coordinate[0] + 1))
+            w = round(size * (coordinate[1] + 1))
+            h0 = round(size * coordinate[0])
+            w0 = round(size * coordinate[1])
             img[h0:h, w0:w] = img[h0:h, w0:w] - 50
         return img
