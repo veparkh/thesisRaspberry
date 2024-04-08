@@ -3,7 +3,6 @@ import numpy as np
 
 
 class Maze:
-    path_matrix = None
     centres_count = 19
     lines_count = centres_count - 1
 
@@ -11,10 +10,32 @@ class Maze:
     _bottom = 0b10
     _left = 0b100
     _right = 0b1000
+    _PATH_MATRIX_PATTERN = np.array(
+        [[_top | _left, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top, _top | _right],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _right, ],
+         [_left | _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom, _bottom,
+          _bottom, _bottom, _bottom, _bottom | _right]],
+        np.uint8)
+    path_matrix = None
 
     def get_path_matrix(self, img, threshold=0.8, indent=5, width=3):
         step = img.shape[0] / self.lines_count
-        self.path_matrix = np.zeros((self.lines_count, self.lines_count), np.uint8)
+        self.path_matrix = self._PATH_MATRIX_PATTERN.copy()
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         _, img_thresh = cv2.threshold(img_gray, 100, 255, cv2.THRESH_BINARY)
         cv2.imshow("img_thresh", img_thresh)
@@ -74,28 +95,27 @@ class Maze:
         cv2.imshow("path)matrix", img_path_matrix)
 
     def find_output_coordinates(self):
-        zero_shift_left = 0
-        zero_shift_right = 0
-        zero_shift_top = 0
-        zero_shift_bottom = 0
+        zero_shift_left = 1
+        zero_shift_right = 1
+        zero_shift_top = 1
+        zero_shift_bottom = 1
+        path_matrix_without_edges = self.path_matrix[1:-1, 1:-1]
         cols = self.path_matrix.shape[1]
         rows = self.path_matrix.shape[0]
-        for i in self.path_matrix:
+        for i in path_matrix_without_edges:
             if np.any(i):
                 break
             zero_shift_top += 1
-
-        for i in range(rows - 1, -1, -1):
-            if np.any(self.path_matrix[i, :]):
+        for i in path_matrix_without_edges[::-1]:
+            if np.any(i):
                 break
             zero_shift_bottom += 1
-
-        for i in range(0, cols):
-            if np.any(self.path_matrix[:, i]):
+        for i in path_matrix_without_edges.T:
+            if np.any(i):
                 break
             zero_shift_left += 1
-        for i in range(cols - 1, -1, -1):
-            if np.any(self.path_matrix[:, i]):
+        for i in path_matrix_without_edges.T[::-1]:
+            if np.any(i):
                 break
             zero_shift_right += 1
         print("path 2", self.path_matrix)
@@ -104,17 +124,91 @@ class Maze:
         output = []
         for ind, val in enumerate(pm_without_zeros_edges[0]):
             if not val & self._top:
-                output.append([zero_shift_top, zero_shift_left + ind])
+                output.append([zero_shift_top, zero_shift_left + ind + 1])
         for ind, val in enumerate(pm_without_zeros_edges[-1]):
             if not val & self._bottom:
                 output.append([rows - zero_shift_bottom - 1, zero_shift_left + ind + 1])
         for ind, val in enumerate(pm_without_zeros_edges[:, 0]):
             if not val & self._left:
-                output.append([zero_shift_top + ind, zero_shift_left])
+                output.append([zero_shift_top + ind + 1, zero_shift_left])
         for ind, val in enumerate(pm_without_zeros_edges[:, -1]):
             if not val & self._right:
-                output.append([zero_shift_top + ind, cols - zero_shift_right - 1])
+                output.append([zero_shift_top + ind + 1, cols - zero_shift_right - 1])
         return output
+
+
+    def get_solution_path(self, weight_path, start_point):
+        exit = [start_point]
+        point = start_point
+        rows, cols = weight_path.shape
+        while weight_path[point]:
+            point_weight = weight_path[point]
+            h, w = point
+            if h > 0 and weight_path[h - 1, w] < point_weight and not (self.path_matrix[h, w] & self._top):
+                point = (h - 1, w)
+                exit.append(point)
+                continue
+            if h < rows - 2 and weight_path[h + 1, w] < point_weight and not (self.path_matrix[h, w] & self._bottom):
+                point = (h + 1, w)
+                exit.append(point)
+                continue
+            if w > 0 and weight_path[h, w - 1] < point_weight and not (self.path_matrix[h, w] & self._left):
+                point = (h, w - 1)
+                exit.append(point)
+                continue
+            if w < cols - 2 and weight_path[h, w + 1] < point_weight and not (self.path_matrix[h, w] & self._right):
+                point = (h, w + 1)
+                exit.append(point)
+                continue
+            return None
+        return exit
+
+    def draw_weight_matrix(self, weight_matrix, len, image=None):
+        if image is None:
+            image = np.zeros((len, len), np.uint8)
+        step_ver = image.shape[0] / weight_matrix.shape[0]
+        step_hor = image.shape[1] / weight_matrix.shape[1]
+        for i in range(0, weight_matrix.shape[0]):
+            for j in range(0, weight_matrix.shape[1]):
+                image = cv2.putText(image, str(weight_matrix[i, j]), thickness=1, color=(255,255,0), org=(round(j * step_hor), round((i + 1) * step_ver)), fontFace=cv2.FONT_HERSHEY_PLAIN,fontScale=1.2)
+        cv2.imshow("weight_matrix", image)
+
+    def get_weight_matrix(self, entry_point):
+
+        _path_matrix = self.path_matrix.copy()
+        weight_matrix = np.zeros_like(self.path_matrix)
+        points_with_same_weights = [entry_point]
+        weight_matrix[entry_point] = 0
+        new_points = []
+        i = 1
+        while True:
+            for h, w in points_with_same_weights:
+                if not _path_matrix[h, w] & self._top:
+                    _path_matrix[h, w] |= self._top
+                    _path_matrix[h - 1, w] |= self._bottom
+                    weight_matrix[h - 1, w] = i
+                    new_points.append((h - 1, w))
+                if not _path_matrix[h, w] & self._bottom:
+                    _path_matrix[h, w] |= self._bottom
+                    _path_matrix[h + 1, w] |= self._top
+                    weight_matrix[h + 1, w] = i
+                    new_points.append((h + 1, w))
+                if not _path_matrix[h, w] & self._left:
+                    _path_matrix[h, w] |= self._left
+                    _path_matrix[h, w - 1] |= self._right
+                    weight_matrix[h, w - 1] = i
+                    new_points.append((h, w - 1))
+                if not _path_matrix[h, w] & self._right:
+                    _path_matrix[h, w] |= self._right
+                    _path_matrix[h, w + 1] |= self._left
+                    weight_matrix[h, w + 1] = i
+                    new_points.append((h, w + 1))
+            if not new_points:
+                break
+            points_with_same_weights = new_points.copy()
+            new_points.clear()
+            i += 1
+        return weight_matrix
 
     def solveMethod(self, origImg, entryPoint):
         edges = np.copy(self.path_matrix)
