@@ -34,20 +34,19 @@ class Maze:
     path_matrix = None
 
     def get_path_matrix(self, img, threshold=0.8, indent=5, width=3):
+        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         step = img.shape[0] / self.lines_count
         self.path_matrix = self._PATH_MATRIX_PATTERN.copy()
-        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         _, img_thresh = cv2.threshold(img_gray, 100, 255, cv2.THRESH_BINARY)
-        cv2.imshow("img_thresh", img_thresh)
         for i in range(1, self.lines_count - 1):
             for j in range(1, self.lines_count - 1):
-                block = img_thresh[round(step * i):round(step * (i + 1)), round(step * j):round(step * (j + 1))]
+                # block = img_thresh[round(step * i):round(step * (i + 1)), round(step * j):round(step * (j + 1))]
 
-                img[round(step * i) + indent:round(step * (i + 1)) - indent, round(step * j) - width:round(step * j) + width] = (255, 0, 0)
+                img[round(step * i) + indent:round(step * (i + 1)) - indent, round(step * j) - width:round(step * j) + width] = (127, 0, 0)
                 left_block = img_thresh[round(step * i) + indent:round(step * (i + 1)) - indent, round(step * j) - width:round(step * j) + width]
                 if cv2.countNonZero(left_block) / left_block.size < threshold:
                     self.path_matrix[i, j] |= self._left
-                img[round(step * i) - width:round(step * i) + width, round(step * j) + indent:round(step * (j + 1)) - indent] = (0, 255, 0)
+                img[round(step * i) - width:round(step * i) + width, round(step * j) + indent:round(step * (j + 1)) - indent] = (127, 0, 0)
                 top_block = img_thresh[round(step * i) - width:round(step * i) + width, round(step * j) + indent:round(step * (j + 1)) - indent]
                 if cv2.countNonZero(top_block) / top_block.size < threshold:
                     self.path_matrix[i, j] |= self._top
@@ -61,19 +60,14 @@ class Maze:
                                round(step * j) + indent:round(step * (j + 1)) - indent]
                 if cv2.countNonZero(bottom_block) / bottom_block.size < threshold:
                     self.path_matrix[i, j] |= self._bottom
-                cv2.imshow("bottom_block,", bottom_block)
-                cv2.imshow("right_block,", right_block)
-                cv2.imshow("top_block,", top_block)
-                cv2.imshow("left_block,", left_block)
-                cv2.imshow("block", block)
-                cv2.imshow("img", img)
+                # cv2.imshow("img", img)
 
     def draw_grid(self, img_transformed):
         step = img_transformed.shape[0] / self.lines_count
         for i in range(0, self.centres_count):
             for j in range(0, self.centres_count):
-                img_grid = cv2.circle(img_transformed, (int(j * step), int(i * step)), 2, thickness=1,
-                                      color=(0, 255, 0))
+                img_transformed = cv2.circle(img_transformed, (int(j * step), int(i * step)), 2, thickness=1,
+                                             color=(0, 255, 0))
         cv2.imshow("grid", img_transformed)
 
     def draw_path_matrix(self, img_len=376):
@@ -92,7 +86,7 @@ class Maze:
                     img_path_matrix[round(step * i):round(step * (i + 1)), round(step * j) - 3:round(step * j) + 3] = 255
                 if self.path_matrix[i, j] & self._right:
                     img_path_matrix[round(step * i):round(step * (i + 1)), round(step * (j + 1)) - 3:round(step * (j + 1)) + 3] = 255
-        cv2.imshow("path)matrix", img_path_matrix)
+        cv2.imshow("path_matrix", img_path_matrix)
 
     def find_output_coordinates(self):
         zero_shift_left = 1
@@ -118,9 +112,7 @@ class Maze:
             if np.any(i):
                 break
             zero_shift_right += 1
-        print("path 2", self.path_matrix)
         pm_without_zeros_edges = self.path_matrix[zero_shift_top + 1:-(zero_shift_bottom + 1), zero_shift_left + 1:-(zero_shift_right + 1)]
-        cv2.waitKey(0)
         output = []
         for ind, val in enumerate(pm_without_zeros_edges[0]):
             if not val & self._top:
@@ -135,7 +127,6 @@ class Maze:
             if not val & self._right:
                 output.append([zero_shift_top + ind + 1, cols - zero_shift_right - 1])
         return output
-
 
     def get_solution_path(self, weight_path, start_point):
         exit = [start_point]
@@ -163,44 +154,39 @@ class Maze:
             return None
         return exit
 
-    def draw_weight_matrix(self, weight_matrix, len, image=None):
+    def draw_weight_matrix(self, weight_matrix, length, image=None):
         if image is None:
-            image = np.zeros((len, len), np.uint8)
+            image = np.zeros((length, length), np.uint8)
         step_ver = image.shape[0] / weight_matrix.shape[0]
         step_hor = image.shape[1] / weight_matrix.shape[1]
         for i in range(0, weight_matrix.shape[0]):
             for j in range(0, weight_matrix.shape[1]):
-                image = cv2.putText(image, str(weight_matrix[i, j]), thickness=1, color=(255,255,0), org=(round(j * step_hor), round((i + 1) * step_ver)), fontFace=cv2.FONT_HERSHEY_PLAIN,fontScale=1.2)
+                image = cv2.putText(image, str(weight_matrix[i, j]), thickness=1, color=(255, 255, 0),
+                                    org=(round(j * step_hor), round((i + 1) * step_ver)), fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=1.2)
         cv2.imshow("weight_matrix", image)
+        cv2.waitKey(0)
 
     def get_weight_matrix(self, entry_point):
 
         _path_matrix = self.path_matrix.copy()
         weight_matrix = np.zeros_like(self.path_matrix)
+        weight_matrix = np.full(_path_matrix.shape,None)
         points_with_same_weights = [entry_point]
-        weight_matrix[entry_point] = 0
+        weight_matrix[entry_point[0],entry_point[1]] = 0
         new_points = []
         i = 1
         while True:
             for h, w in points_with_same_weights:
-                if not _path_matrix[h, w] & self._top:
-                    _path_matrix[h, w] |= self._top
-                    _path_matrix[h - 1, w] |= self._bottom
+                if (not _path_matrix[h, w] & self._top) and weight_matrix[h - 1, w] is None:
                     weight_matrix[h - 1, w] = i
                     new_points.append((h - 1, w))
-                if not _path_matrix[h, w] & self._bottom:
-                    _path_matrix[h, w] |= self._bottom
-                    _path_matrix[h + 1, w] |= self._top
+                if (not _path_matrix[h, w] & self._bottom) and weight_matrix[h + 1, w] is None:
                     weight_matrix[h + 1, w] = i
                     new_points.append((h + 1, w))
-                if not _path_matrix[h, w] & self._left:
-                    _path_matrix[h, w] |= self._left
-                    _path_matrix[h, w - 1] |= self._right
+                if (not _path_matrix[h, w] & self._left) and weight_matrix[h, w - 1] is None:
                     weight_matrix[h, w - 1] = i
                     new_points.append((h, w - 1))
-                if not _path_matrix[h, w] & self._right:
-                    _path_matrix[h, w] |= self._right
-                    _path_matrix[h, w + 1] |= self._left
+                if (not _path_matrix[h, w] & self._right) and weight_matrix[h, w + 1] is None:
                     weight_matrix[h, w + 1] = i
                     new_points.append((h, w + 1))
             if not new_points:
@@ -217,13 +203,12 @@ class Maze:
         sp = []
         rec = [0]
         p = 0
-        sp.append(list(entryPoint[0]))
-        print(entryPoint[0], entryPoint[1])
-        print(sp[p][0], sp[p][1])
-        cv2.waitKey(0)
+        # sp.append(list(entryPoint[0]))
+        # print(entryPoint[0], entryPoint[1])
+        # print(sp[p][0], sp[p][1])
         while True:
             h, w = sp[p][0], sp[p][1]
-            print(h, w)
+            # print(h, w)
             # h stands for height and w stands for width
             if sp[-1] in list(entryPoint[1]):
                 break
