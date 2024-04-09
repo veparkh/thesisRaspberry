@@ -48,32 +48,33 @@ def flatten_table(img):
     upper_red = np.array([180, 200, 200])
     mask1 = cv2.inRange(img_hsv, lower_red, upper_red)
 
-    # join my masks
+    # joinmasks
     mask = mask0 + mask1
-    # cv2.imshow("img_mask", mask)
+    cv2.imshow("img_mask", mask)
 
     img_red = cv2.bitwise_and(img, img, mask=mask)
-    # cv2.imshow("img_red",img_red)
-    # cv.imshow("img_blurred", img_blurred)
+    cv2.imshow("img_red",img_red)
     img_bin = cv.cvtColor(img_red, cv.COLOR_BGR2GRAY)
     img_canny = cv.Canny(img_bin, 70, 210)
-    # cv2.imshow("canny without circles",img_canny)
+    cv2.imshow("canny without circles",img_canny)
 
-    circles = cv.HoughCircles(img_canny, cv.HOUGH_GRADIENT, 1, 80,
-                              param1=20, param2=7, minRadius=5, maxRadius=10)
+    circles = cv.HoughCircles(img_canny, cv.HOUGH_GRADIENT, 1, 10,
+                              param1=20, param2=7, minRadius=3, maxRadius=10)
 
     circles = np.uint16(np.around(circles))
     thresh, img_thresh = cv.threshold(img_bin, 40, 255, cv.THRESH_BINARY)
+    circles_sorted_by_rad = sorted(circles, key=lambda x: x[2])
+    ball_coord = circles_sorted_by_rad[0][-1][:-1]
 
-    # for i in circles[0, :]:
-    #     # draw the outer circle
-    #     cv.circle(img_canny, (i[0], i[1]), i[2], 120, 2)
-    #     # draw the center of the circle
-    #     cv.circle(img_canny, (i[0], i[1]), 2, 120, 3)
+    for i in circles[0, :]:
+        # draw the outer circle
+        cv.circle(img_canny, (i[0], i[1]), i[2], 120, 2)
+        # draw the center of the circle
+        cv.circle(img_canny, (i[0], i[1]), 2, 120, 3)
 
     # print(len(circles[0]))
-    # cv.imshow("img_thresh ", img_thresh)
-    # cv.imshow("img_canny", img_canny)
+    cv.imshow("img_thresh ", img_thresh)
+    cv.imshow("img_canny", img_canny)
     circles_coord = [[x[0], x[1]] for x in circles[0, :]]
     if len(circles_coord) < 4:
         cv.waitKey(0)
@@ -90,8 +91,9 @@ def flatten_table(img):
     M = cv.getPerspectiveTransform(np.float32(initial_points),
                                    np.float32([[0, 0], [0, square_len], [square_len, square_len], [square_len, 0]]))
     img_aligned = cv.warpPerspective(img, M, (square_len, square_len))
-    # cv.imshow("img_aligned", img_aligned)
-    return img_aligned
+    ball_coord = np.float32(np.array([[[ball_coord[0], ball_coord[1]]]]))
+    ball_coord_transf = cv2.perspectiveTransform(ball_coord, M)[0]
+    return img_aligned,ball_coord_transf[0]
 
 
 def maze_solver():
@@ -104,21 +106,23 @@ def maze_solver():
 
         # cv.imshow(" org", frame)
         start = round(time.time() * 1000)
-        img_aligned = flatten_table(frame)
+        img_aligned, ball_coord = flatten_table(frame)
         if img_aligned is not None:
             maze.get_path_matrix(img_aligned)
+            ball_position = maze.get_ball_position(ball_coord, img_aligned.shape)
+            print("ball pos", ball_position)
             maze.draw_grid(img_aligned)
             maze.draw_path_matrix()
             out_point = maze.find_output_coordinates()
             weight_matrix = maze.get_weight_matrix(out_point[0])
-
+            maze.draw_ball(img_aligned,ball_coord)
             maze.draw_weight_matrix(weight_matrix, 0, img_aligned.copy())
-            exit_path = maze.get_solution_path(weight_matrix, (7, 7))
+            exit_path = maze.get_solution_path(weight_matrix, ball_position)
             img_solved = maze.pathHighlight(img_aligned.copy(), exit_path)
             cv2.imshow("img_solved", img_solved)
         end = round(time.time() * 1000)
         print(end - start)
-        cv2.waitKey(30)
+        cv2.waitKey(1)
 
     # edgesToSolve = closeEntryPoint(point1, edges)
     # path = solveMethod(img, [point1, point2], edgesToSolve)

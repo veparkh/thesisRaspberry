@@ -164,7 +164,7 @@ class Maze:
                 image = cv2.putText(image, str(weight_matrix[i, j]), thickness=1, color=(255, 255, 0),
                                     org=(round(j * step_hor), round((i + 1) * step_ver)), fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=1.2)
         cv2.imshow("weight_matrix", image)
-        cv2.waitKey(0)
+
 
     def get_weight_matrix(self, entry_point):
 
@@ -266,3 +266,12 @@ class Maze:
             w0 = round(size * coordinate[1])
             img[h0:h, w0:w] = img[h0:h, w0:w] - 50
         return img
+
+    def draw_ball(self, img_aligned, ball_coord):
+        img_ball = cv2.circle(img_aligned, center=(round(ball_coord[0]), round(ball_coord[1])),thickness=2,color=(255,0,255),lineType=cv2.LINE_8,radius=3)
+        cv2.imshow("img_ball", img_ball)
+
+    def get_ball_position(self, ball_coord, size):
+        cv2.waitKey(0)
+        return int(self.lines_count * ball_coord[1] / size[1]), int(self.lines_count * ball_coord[0] / size[0])
+
