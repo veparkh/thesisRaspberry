@@ -39,7 +39,7 @@ def detect_table(img):
 def flatten_table(img):
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     # cv2.imwrite("img_hsv.png", img_hsv)
-    lower_red = np.array([0, 30, 130])
+    lower_red = np.array([0, 30, 120])
     upper_red = np.array([10, 200, 210])
     mask0 = cv2.inRange(img_hsv, lower_red, upper_red)
 
@@ -53,10 +53,10 @@ def flatten_table(img):
     cv2.imshow("img_mask", mask)
 
     img_red = cv2.bitwise_and(img, img, mask=mask)
-    cv2.imshow("img_red",img_red)
+    cv2.imshow("img_red", img_red)
     img_bin = cv.cvtColor(img_red, cv.COLOR_BGR2GRAY)
     img_canny = cv.Canny(img_bin, 70, 210)
-    cv2.imshow("canny without circles",img_canny)
+    cv2.imshow("canny without circles", img_canny)
 
     circles = cv.HoughCircles(img_canny, cv.HOUGH_GRADIENT, 1, 10,
                               param1=20, param2=7, minRadius=3, maxRadius=10)
@@ -71,29 +71,26 @@ def flatten_table(img):
         cv.circle(img_canny, (i[0], i[1]), i[2], 120, 2)
         # draw the center of the circle
         cv.circle(img_canny, (i[0], i[1]), 2, 120, 3)
+    circles_filtered_by_rad = list(filter(lambda x: (x[2] > 5), circles[0,:]))
 
     # print(len(circles[0]))
     cv.imshow("img_thresh ", img_thresh)
     cv.imshow("img_canny", img_canny)
-    circles_coord = [[x[0], x[1]] for x in circles[0, :]]
-    if len(circles_coord) < 4:
-        cv.waitKey(0)
-    if len(circles_coord) > 4:
-        x_sort = sorted(circles_coord, key=lambda x: x[0])
-        circles_coord = x_sort[:2] + x_sort[-2:]
+    if len(circles_filtered_by_rad) < 4:
+        return None, None
+    circles_coord = [(x[0],x[1]) for x in circles_filtered_by_rad]
+    x_sort = sorted(circles_coord, key=lambda x: x[0])
+    circles_coord = x_sort[:2] + x_sort[-2:]
     x_sort = sorted(circles_coord, key=lambda x: x[0])
     left_sorted = sorted(x_sort[:2], key=lambda x: x[1])
     right_sorted = sorted(x_sort[2:], key=lambda x: x[1])
-    initial_points = [left_sorted[0], left_sorted[1], right_sorted[1],
-                      right_sorted[0]]  # left_top, bottom-top,right_bottom
-
+    initial_points = [left_sorted[0], left_sorted[1], right_sorted[1], right_sorted[0]]
     square_len = 376
-    M = cv.getPerspectiveTransform(np.float32(initial_points),
-                                   np.float32([[0, 0], [0, square_len], [square_len, square_len], [square_len, 0]]))
+    M = cv.getPerspectiveTransform(np.float32(initial_points), np.float32([[0, 0], [0, square_len], [square_len, square_len], [square_len, 0]]))
     img_aligned = cv.warpPerspective(img, M, (square_len, square_len))
     ball_coord = np.float32(np.array([[[ball_coord[0], ball_coord[1]]]]))
     ball_coord_transf = cv2.perspectiveTransform(ball_coord, M)[0]
-    return img_aligned,ball_coord_transf[0]
+    return img_aligned, ball_coord_transf[0]
 
 
 def maze_solver():
@@ -101,28 +98,39 @@ def maze_solver():
     maze = maze_solving.Maze()
 
     while True:
-
         ret, frame = cap.read()
+        try:
+            cv.imshow(" org", frame)
+            img_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            cv2.imwrite("frame.png", img_hsv)
+            start = round(time.time() * 1000)
+            img_aligned, ball_position = flatten_table(frame)
+            if img_aligned is not None:
+                maze.get_path_matrix(img_aligned)
 
-        # cv.imshow(" org", frame)
-        start = round(time.time() * 1000)
-        img_aligned, ball_coord = flatten_table(frame)
-        if img_aligned is not None:
-            maze.get_path_matrix(img_aligned)
-            ball_position = maze.get_ball_position(ball_coord, img_aligned.shape)
-            print("ball pos", ball_position)
-            maze.draw_grid(img_aligned)
-            maze.draw_path_matrix()
-            out_point = maze.find_output_coordinates()
-            weight_matrix = maze.get_weight_matrix(out_point[0])
-            maze.draw_ball(img_aligned,ball_coord)
-            maze.draw_weight_matrix(weight_matrix, 0, img_aligned.copy())
-            exit_path = maze.get_solution_path(weight_matrix, ball_position)
-            img_solved = maze.pathHighlight(img_aligned.copy(), exit_path)
-            cv2.imshow("img_solved", img_solved)
-        end = round(time.time() * 1000)
-        print(end - start)
-        cv2.waitKey(1)
+                # maze.draw_grid(img_aligned)
+                # maze.draw_path_matrix()
+                out_point = maze.find_output_coordinates()
+                if out_point is None:
+                    print("out_point is  None")
+                    continue
+                weight_matrix = maze.get_weight_matrix(out_point[0])
+                # maze.draw_ball(img_aligned, ball_position)
+                # maze.draw_weight_matrix(weight_matrix, 0, img_aligned.copy())
+                ball_aligned_position = maze.get_ball_position(ball_position, img_aligned.shape)
+                if ball_aligned_position is None:
+                    print("Шарик не определён")
+                    continue
+                print("ball pos", ball_aligned_position)
+                exit_path = maze.get_solution_path(weight_matrix, ball_aligned_position)
+                if exit_path is not None:
+                    img_solved = maze.pathHighlight(img_aligned.copy(), exit_path)
+                    cv2.imshow("img_solved", img_solved)
+            end = round(time.time() * 1000)
+            print(end - start)
+            cv2.waitKey(1)
+        except:
+            print("exception")
 
     # edgesToSolve = closeEntryPoint(point1, edges)
     # path = solveMethod(img, [point1, point2], edgesToSolve)
