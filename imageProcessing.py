@@ -1,22 +1,13 @@
+import time
+
 import cv2
 import cv2 as cv
 import numpy as np
-
-
-def highlight_color(img):
-    original = img.copy()
-    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-    lower = np.array([90, 40, 140])
-    upper = np.array([140, 255, 255])
-    mask = cv.inRange(hsv, lower, upper)
-    # mask = cv2.dilate(mask,(3,3),anchor = (-1,-1),iterations=11,borderType=cv2.BORDER_DEFAULT)
-    result = cv.bitwise_and(original, original, mask=mask)
-    cv2.imshow("color transformation", result)
-    return result
+import maze_solving
 
 
 def image_handler():
-    cap = cv.VideoCapture(0)
+    cap = cv.VideoCapture(1)
     ret, frame = cap.read()
     while True:
         ret, frame = cap.read()
@@ -27,207 +18,124 @@ def image_handler():
             break
 
 
-def findBlockLines(img):
-    lines = cv2.HoughLines(img, 0.1, np.pi / 280, 100, 0, 0)
-    verticalLines = list(filter(lambda x: -1 < x[0][1] < 1, lines))
-    verLinesFiltered = list()
-    horLinesFiltered = list()
+def detect_table(img):
+    img_binary = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    _, img_thresh = cv.threshold(img_binary, 160, 255, cv.THRESH_BINARY)
+    # cv.imshow("img_thresh", img_thresh)
+    img_contours = np.zeros_like(img_thresh)
+    img_erosed = cv.erode(img_thresh, kernel=np.ones((3, 3), np.uint8), anchor=(0, 0), iterations=1)
+    # cv.imshow("img_erosed", img_erosed)
 
-    horizontalLines = list(filter(lambda x: 1 < x[0][1] < 2, lines))
-    verticalLines.sort(key=lambda x: x[0][0])
-    horizontalLines.sort(key=lambda x: x[0][0])
-    for i in range(0, len(verticalLines), 2):
-        if verticalLines[i][0][0] - 2 < abs(verticalLines[i][0][0]) < verticalLines[i + 1][0][0] + 2:
-            verLinesFiltered.append([(verticalLines[i][0][0] + verticalLines[i + 1][0][0]) / 2, 0])
-    for i in range(0, len(horizontalLines), 2):
-        if horizontalLines[i][0][0] - 2 < abs(horizontalLines[i][0][0]) < horizontalLines[i + 1][0][0] + 2:
-            horLinesFiltered.append([(horizontalLines[i][0][0] + horizontalLines[i + 1][0][0]) / 2, np.pi / 2])
-    print(verLinesFiltered)
-    print(len(verLinesFiltered))
-    print(horLinesFiltered)
-    print(len(horLinesFiltered))
-    alLines = horLinesFiltered + verLinesFiltered
-    linesImg = np.zeros_like(img)
-    if alLines is not None:
-        for i in range(0, len(alLines)):
-            rho = alLines[i][0]
-            theta = alLines[i][1]
-            a = np.cos(theta)
-            b = np.sin(theta)
-            x0 = a * rho
-            y0 = b * rho
-            pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * a))
-            pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * a))
-            cv.line(linesImg, pt1, pt2, (255), 1, cv.LINE_4)
-    cv2.imshow("lines", linesImg)
-    return horLinesFiltered, verLinesFiltered
+    contours, hierarchy = cv.findContours(img_erosed, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    cv.drawContours(img_contours, contours=contours, hierarchy=hierarchy, contourIdx=-1, color=255)
+    # cv.imshow("img_contours", img_contours)
+    if len(contours) != 0:
+        c = max(contours, key=cv.contourArea)
+        x, y, w, h = cv.boundingRect(c)
+        return img[y - 10:y + h + 10, x - 10:x + w + 10]
+    return None
 
 
-def findPathMatrix():
-    labyrImg = cv2.imread("labyrinth3.png", cv2.IMREAD_GRAYSCALE)
-    labyrImg = 255 - labyrImg
-    cv2.imshow("orig", labyrImg)
-    _, labyrImg = cv2.threshold(labyrImg, 150, 255, cv2.THRESH_BINARY)
-    cv2.imshow("thresh", labyrImg)
+def flatten_table(img):
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    # cv2.imwrite("img_hsv.png", img_hsv)
+    lower_red = np.array([0, 30, 120])
+    upper_red = np.array([10, 200, 210])
+    mask0 = cv2.inRange(img_hsv, lower_red, upper_red)
 
-    horLines, verLines = findBlockLines(labyrImg)
+    # upper mask (170-180)
+    lower_red = np.array([150, 40, 120])
+    upper_red = np.array([180, 200, 200])
+    mask1 = cv2.inRange(img_hsv, lower_red, upper_red)
 
-    # paths = np.zeros(shape=(len(horizontalLines), len(verticalLines)))
-    findInputs(horLines, verLines, labyrImg)
-    cv2.waitKey(0)
+    # joinmasks
+    mask = mask0 + mask1
+    cv2.imshow("img_mask", mask)
 
+    img_red = cv2.bitwise_and(img, img, mask=mask)
+    cv2.imshow("img_red", img_red)
+    img_bin = cv.cvtColor(img_red, cv.COLOR_BGR2GRAY)
+    img_canny = cv.Canny(img_bin, 70, 210)
+    cv2.imshow("canny without circles", img_canny)
 
-def findEdges(block):
-    edge = 0
-    topBlock = block[0:int(block.shape[0] / 2), :]
-    leftBlock = block[:, 0:int(block.shape[1] / 2)]
-    rightBlock = block[:, int(block.shape[1] / 2):block.shape[1]]
-    bottomBlock = block[int(block.shape[0] / 2):block.shape[0], :]
-    cv2.imshow("topBlock", topBlock)
-    cv2.imshow("leftBlock", leftBlock)
-    cv2.imshow("rightBlock", rightBlock)
-    cv2.imshow("bottomBlock", bottomBlock)
-    cv2.imshow("Block", block)
-    line = cv2.HoughLines(topBlock, 0.2, np.pi / 180, 15)
-    if line is None:
-        edge += 1000
-    line = cv2.HoughLines(bottomBlock, 0.2, np.pi / 180, 15)
-    if line is None:
-        edge += 100
-    line = cv2.HoughLines(leftBlock, 0.2, np.pi / 180, 15)
-    if line is None:
-        edge += 10
-    line = cv2.HoughLines(rightBlock, 0.2, np.pi / 180, 15)
-    if line is None:
-        edge += 1
-    return edge
+    circles = cv.HoughCircles(img_canny, cv.HOUGH_GRADIENT, 1, 10,
+                              param1=20, param2=7, minRadius=3, maxRadius=10)
 
+    circles = np.uint16(np.around(circles))
+    thresh, img_thresh = cv.threshold(img_bin, 40, 255, cv.THRESH_BINARY)
+    circles_sorted_by_rad = sorted(circles, key=lambda x: x[2])
+    ball_coord = circles_sorted_by_rad[0][-1][:-1]
 
-def findInputs(horLines, verLines, img):
-    # верх`
-    point1 = (0, 0)
-    point2 = (0, 0)
-    for i in range(0, len(verLines) - 1):
-        topBlock = img[int(horLines[0][0]):int(horLines[1][0] / 2), int(verLines[i][0]):int(verLines[i + 1][0] + 2)]
-        line = cv2.HoughLines(topBlock, 0.2, np.pi / 180, 15)
-        if (line is None):
-            point1 = (0, i)
-        print(line)
-        cv2.imshow("topBlock", topBlock)
-    # лево # право
-    # низ
-    for i in range(0, len(verLines) - 1):
-        block = img[int(horLines[-2][0]):int(horLines[-1][0] + 1), int(verLines[i][0]):int(verLines[i + 1][0] + 2)]
-        bottomBlock = img[
-                      int((horLines[-2][0] + horLines[-1][0]) / 2):int(horLines[-1][0] + 2),
-                      int(verLines[i][0]):int(verLines[i + 1][0] + 2)
-                      ]
-        line = cv2.HoughLines(bottomBlock, 0.2, np.pi / 180, 15)
-        if (line is None):
-            point2 = (len(horLines) - 2, i)
-    print(point1)
-    print(point2)
+    for i in circles[0, :]:
+        # draw the outer circle
+        cv.circle(img_canny, (i[0], i[1]), i[2], 120, 2)
+        # draw the center of the circle
+        cv.circle(img_canny, (i[0], i[1]), 2, 120, 3)
+    circles_filtered_by_rad = list(filter(lambda x: (x[2] > 5), circles[0,:]))
 
-    edges = list()
-    for i in range(0, len(horLines) - 1):
-        rowEdges = list()
-        for j in range(0, len(verLines) - 1):
-            block = img[int(horLines[i][0]):int(horLines[i + 1][0] + 2),
-                    int(verLines[j][0]):int(verLines[j + 1][0] + 2)]
-            rowEdges.append(findEdges(block))
-        edges.append(rowEdges)
-    print(edges)
-    edgesToSolve = closeEntryPoint(point1, edges)
-    path = solveMethod(img, [point1, point2], edgesToSolve)
-    pathImg = pathHighlight(img, path)
-    cv2.imshow("path", pathImg)
-    return [point1, point2], edges
+    # print(len(circles[0]))
+    cv.imshow("img_thresh ", img_thresh)
+    cv.imshow("img_canny", img_canny)
+    if len(circles_filtered_by_rad) < 4:
+        return None, None
+    circles_coord = [(x[0],x[1]) for x in circles_filtered_by_rad]
+    x_sort = sorted(circles_coord, key=lambda x: x[0])
+    circles_coord = x_sort[:2] + x_sort[-2:]
+    x_sort = sorted(circles_coord, key=lambda x: x[0])
+    left_sorted = sorted(x_sort[:2], key=lambda x: x[1])
+    right_sorted = sorted(x_sort[2:], key=lambda x: x[1])
+    initial_points = [left_sorted[0], left_sorted[1], right_sorted[1], right_sorted[0]]
+    square_len = 376
+    M = cv.getPerspectiveTransform(np.float32(initial_points), np.float32([[0, 0], [0, square_len], [square_len, square_len], [square_len, 0]]))
+    img_aligned = cv.warpPerspective(img, M, (square_len, square_len))
+    ball_coord = np.float32(np.array([[[ball_coord[0], ball_coord[1]]]]))
+    ball_coord_transf = cv2.perspectiveTransform(ball_coord, M)[0]
+    return img_aligned, ball_coord_transf[0]
 
 
-def closeEntryPoint(entryPoint, edges):
-    h, w = entryPoint[0], entryPoint[1]
+def maze_solver():
+    cap = cv.VideoCapture(1)
+    maze = maze_solving.Maze()
 
-    if h == 0:
-        if (edges[h][w] >= 1000):
-            edges[h][w] -= 1000
-    if w == 0:
-        edges[h][w] &= 0b1101
-    if h == len(edges) - 1:
-        edges[h][w] &= 0b1011
-    if w == len(edges[0]) - 1:
-        edges[h][w] &= 0b1110
-    print(edges)
-    return edges
-
-
-def solveMethod(origImg, entryPoint, edges):
-    shortestPath = []
-    img = origImg
-    sp = []
-    rec = [0]
-    p = 0
-    sp.append(list(entryPoint[0]))
-    print(entryPoint[0], entryPoint[1])
-    print(sp[p][0], sp[p][1])
-    cv2.waitKey(0)
     while True:
-        h, w = sp[p][0], sp[p][1]
-        print(h, w)
-        # h stands for height and w stands for width
-        if sp[-1] == list(entryPoint[1]):
-            break
-        if edges[h][w] > 0:
-            rec.append(len(sp))
-        if edges[h][w] > 999:
-            # If this edges is open upwards
-            edges[h][w] = edges[h][w] - 1000
-            h = h - 1
-            sp.append([h, w])
-            edges[h][w] = edges[h][w] - 100
-            p = p + 1
-            continue
-        if edges[h][w] > 99:
-            # If the edges is open downward
-            edges[h][w] = edges[h][w] - 100
-            h = h + 1
-            sp.append([h, w])
-            edges[h][w] = edges[h][w] - 1000
-            p = p + 1
-            continue
-        if edges[h][w] > 9:
-            # If the edges is open left
-            edges[h][w] = edges[h][w] - 10
-            w = w - 1
-            sp.append([h, w])
-            edges[h][w] = edges[h][w] - 1
-            p = p + 1
-            continue
-        if edges[h][w] == 1:
-            # If the edges is open right
-            edges[h][w] = edges[h][w] - 1
-            w = w + 1
-            sp.append([h, w])
-            edges[h][w] = edges[h][w] - 10
-            p = p + 1
-            continue
-        else:
-            # Removing the coordinates that are closed or don't show any path
-            sp.pop()
-            rec.pop()
-            p = rec[-1]
+        ret, frame = cap.read()
+        try:
+            cv.imshow(" org", frame)
+            img_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            cv2.imwrite("frame.png", img_hsv)
+            start = round(time.time() * 1000)
+            img_aligned, ball_position = flatten_table(frame)
+            if img_aligned is not None:
+                maze.get_path_matrix(img_aligned)
 
-    for i in sp:
-        shortestPath.append(tuple(i))
-    print(shortestPath)
-    return shortestPath
+                # maze.draw_grid(img_aligned)
+                # maze.draw_path_matrix()
+                out_point = maze.find_output_coordinates()
+                if out_point is None:
+                    print("out_point is  None")
+                    continue
+                weight_matrix = maze.get_weight_matrix(out_point[0])
+                # maze.draw_ball(img_aligned, ball_position)
+                # maze.draw_weight_matrix(weight_matrix, 0, img_aligned.copy())
+                ball_aligned_position = maze.get_ball_position(ball_position, img_aligned.shape)
+                if ball_aligned_position is None:
+                    print("Шарик не определён")
+                    continue
+                print("ball pos", ball_aligned_position)
+                exit_path = maze.get_solution_path(weight_matrix, ball_aligned_position)
+                if exit_path is not None:
+                    img_solved = maze.pathHighlight(img_aligned.copy(), exit_path)
+                    cv2.imshow("img_solved", img_solved)
+            end = round(time.time() * 1000)
+            print(end - start)
+            cv2.waitKey(1)
+        except:
+            print("exception")
+
+    # edgesToSolve = closeEntryPoint(point1, edges)
+    # path = solveMethod(img, [point1, point2], edgesToSolve)
+    # pathImg = pathHighlight(img, path)
+    # cv.imshow("path", pathImg)
 
 
-def pathHighlight(img, path):
-    size = 16
-    for coordinate in path:
-        h = size * (coordinate[0] + 1)
-        w = size * (coordinate[1] + 1)
-        h0 = size * coordinate[0]
-        w0 = size * coordinate[1]
-        img[h0:h, w0:w] = img[h0:h, w0:w] - 50
-    return img
+maze_solver()
