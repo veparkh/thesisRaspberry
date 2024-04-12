@@ -1,11 +1,13 @@
 from datetime import datetime
+from maze_solving import Maze
 import struct
 import threading
 import time
-
 import cv2
 import zlib
 import queue
+
+import maze_solving
 from bluetooth import BluetoothSocket
 from dataclasses import dataclass
 import uartDataExchange
@@ -114,38 +116,92 @@ def b_recv_messages_thread_f(socket: BluetoothSocket, lock: threading.Lock):
 
 def auto_control(client_sock: BluetoothSocket, lock):
     client_sock.send(add_crc(autoControlCommand))
-    img = cv2.imread("labyrinth.png", cv2.IMREAD_GRAYSCALE)
-    byte_array = image_to_byte_array(img)
+    # maze = Maze()
+    # cap = cv2.VideoCapture(1)
+    # is_weight_matrix_built = False
+    # prev_x_err = 0
+    # prev_y_err = 0
+    # out_point = None
+    # x_err_sum = 0
+    # y_err_sum = 0
+    # exit_path = None
+    # weight_matrix = None
+    # ret, frame = cap.read()
+    # prev_coord = [0, 0]
     global image
-    if image:
-        client_sock.send(add_crc(imageCommand + byte_array.size.to_bytes(4, 'big')))
-        client_sock.send(byte_array)
-        image = False
-    x = 0
-    y = 40
     while True:
-        if x > 1000:
-            x = 0
-        if y > 1500:
-            y = 0
-        x += 5
-        y += 5
-        client_sock.send(coord_to_byte_arr_with_crc(x, y))
-        time.sleep(0.02)
-
-        with uartDataExchange.lock_is_UART_connected:
-            if uartDataExchange.is_UART_connected:
-                uartDataExchange.queue_task.put(Angles(roll=32.245, pitch=-36.576))
         with lock:
+            print(f"mode {mode}")
             if mode != 1:
                 with uartDataExchange.lock_is_UART_connected:
                     if uartDataExchange.is_UART_connected:
                         uartDataExchange.queue_task.put(Angles(0, 0))
+                image = True
                 break
+        if image:
+            img = cv2.imread("img_hsv.png")
+            byte_array = image_to_byte_array(img)
+            print("sending image")
+            client_sock.send(add_crc(imageCommand + byte_array.size.to_bytes(4, 'big')))
+            client_sock.send(byte_array)
+            image = False
+        client_sock.send(coord_to_byte_arr_with_crc(0.5,0.5))
+        time.sleep(0.02)
+        # ret, frame = cap.read()
+        # start = time.time()
+        # if not ret:
+        #     continue
+        # img_table, ball_coord = maze.flatten_table(frame)
+        # if img_table is None:
+        #     continue
+        # if weight_matrix is None:
+        #     maze.build_path_matrix(img_table)
+        #     out_point = maze.find_output_coordinates()
+        # if out_point is None:
+        #     continue
+        # weight_matrix = maze.get_weight_matrix(out_point)
+        # if image:
+        #     img_maze = maze.draw_path_matrix()
+        #     byte_array = image_to_byte_array(img_maze)
+        #     client_sock.send(add_crc(imageCommand + byte_array.size.to_bytes(4, 'big')))
+        #     client_sock.send(byte_array)
+        #     image = False
+        # ball_aligned_position = maze.get_ball_position(ball_coord, img_table.shape)
+        # if ball_aligned_position is None:
+        #     continue
+        # if exit_path is None or ball_aligned_position not in exit_path:
+        #     exit_path = maze.get_solution_path(weight_matrix, ball_aligned_position)
+        # if exit_path is None:
+        #     continue
+        # index = exit_path.index(ball_aligned_position)
+        # if len(exit_path) == index:
+        #     continue
+        # x_goal, y_goal = maze.get_coordinates_by_position(exit_path[index + 1])
+        # x_error = x_goal - ball_coord[0]
+        # y_error = y_goal - ball_coord[1]
+        # dt = round((time.time() - start) * 1000)
+        # x_angle = x_error * 0.03  # + 0.02 * dt*maze.block_count * (prev_x_err-x_error) + 0.0001 * x_err_sum
+        # print("x_angle", x_angle)
+        # y_angle = y_error * 0.03  # + 0.02 * dt * maze.block_count * (prev_y_err - y_error) + 0.0001 * y_err_sum
+        # print("y_angle", y_angle)
+        # prev_x_err = x_error
+        # prev_y_err = y_error
+        # x_err_sum += x_error
+        # y_err_sum += y_error
+        # if abs(x_err_sum) > 400:
+        #     x_err_sum = 0
+        # if abs(y_err_sum) > 400:
+        #     y_err_sum = 0
+        # client_sock.send(coord_to_byte_arr_with_crc(ball_coord[0] / img_table.shape[1], ball_coord[1] / img_table.shape[0]))
+        with uartDataExchange.lock_is_UART_connected:
+            if uartDataExchange.is_UART_connected:
+                pass
+                # uartDataExchange.queue_task.put(Angles(roll=x_angle, pitch=y_angle))
 
 
 def manual_control(socket: BluetoothSocket, lock):
     socket.send(add_crc(manualControlCommand))
+    print(add_crc(manualControlCommand))
     global mode
     while True:
         with lock:
@@ -156,7 +212,7 @@ def manual_control(socket: BluetoothSocket, lock):
                 break
         try:
             angles = queue_angles.get(True, 1)
-            #print(f"angles {angles}")
+            # print(f"angles {angles}")
             with uartDataExchange.lock_is_UART_connected:
                 if uartDataExchange.is_UART_connected:
                     uartDataExchange.queue_task.put(Angles(angles.pitch[0], angles.roll[0]))
@@ -200,6 +256,7 @@ def exchange(socket: BluetoothSocket, lock: threading.Lock):
             elif mode_local == 4:
                 if is_first_waiting:
                     socket.send(add_crc(chooseModeCommand))
+                    print("chooseModeCommand send")
                     is_first_waiting = False
                     time.sleep(0.02)
                 pass
