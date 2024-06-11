@@ -9,4 +9,5 @@ https://github.com/veparkh/thesisRaspberry/assets/137297412/4c32c58e-30db-495a-b
 
 
 ![model](https://github.com/veparkh/thesisRaspberry/assets/137297412/2140302a-05ee-45a2-992e-e61b61dc652e)
-![1-ezgif com-crop](https://github.com/veparkh/thesisRaspberry/assets/137297412/f15a1f9f-02ed-4105-b7ad-e7d4b5f7858d)
+
+
