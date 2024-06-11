@@ -13,7 +13,7 @@ position_answer_bytes = bytes([0xAF, 0xE4, 0xCD])
 is_UART_connected = False
 lock_is_UART_connected = threading.Lock()
 
-
+# Поиск нужного порта по запросу и ответу
 def get_port():
     # Find and open the COM port
     ports = serial.tools.list_ports.comports()
@@ -58,7 +58,7 @@ def uart_thread():
                 try:
                     angles = queue_task.get(True,1)
                     if angles is not Angles:
-                        print("wrong type")
+                        print(f"wrong type {type(Angles)}")
                     #print("angles", angles)
                     bytes_task = bytes(struct.pack("<ff", angles.pitch, angles.roll))
                     #print("bytes_task", bytes_task)
