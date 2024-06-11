@@ -13,7 +13,7 @@ position_answer_bytes = bytes([0xAF, 0xE4, 0xCD])
 is_UART_connected = False
 lock_is_UART_connected = threading.Lock()
 
-
+# Поиск нужного порта по запросу и ответу
 def get_port():
     # Find and open the COM port
     ports = serial.tools.list_ports.comports()
